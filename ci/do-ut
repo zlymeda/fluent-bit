@@ -69,6 +69,8 @@ then
     find lib -name "*.gcda" -o -name "*.gcno" -print0 | xargs -0 -r rm
     gcovr -e "build/sql.l" -e "build/sql.y" -p -r .. . | cut -c1-100
     gcovr -e "build/sql.l" -e "build/sql.y" --html --html-details -p -r .. -o coverage/index.html .
+    gcovr -e "build/ra.l" -e "build/ra.y" -p -r .. . | cut -c1-100
+    gcovr -e "build/ra.l" -e "build/ra.y" --html --html-details -p -r .. -o coverage/index.html .
     echo
     echo "See coverage/index.html for code-coverage details"
 fi

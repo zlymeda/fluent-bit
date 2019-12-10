@@ -545,7 +545,7 @@ static void aws_test_suite()
     }
 
     /* Convert static '20150830T123600Z' to unix timestamp */
-    t = 1440938160 + 21600;
+    t = 1440938160;// + 21600;
     region = "us-east-1";
     access_key = "AKIDEXAMPLE";
     service = "service";
@@ -556,6 +556,10 @@ static void aws_test_suite()
     mk_list_foreach(head, tests) {
         awt = mk_list_entry(head, struct aws_test, _head);
         fprintf(stderr, "[AWS Signv4 Unit Test] %-50s", awt->name);
+        printf("\n");
+        printf("=> .req\n%s\n", awt->req);
+        printf("=> .creq\n%s\n", awt->creq);
+        printf("=> .sts\n%s\n", awt->sts);
         signature = flb_signv4_do(awt->c,
                                   FLB_TRUE,  /* normalize URI ? */
                                   FLB_FALSE, /* add x-amz-date header ? */

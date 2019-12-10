@@ -945,23 +945,28 @@ flb_sds_t flb_signv4_do(struct flb_http_client *c, int normalize_uri,
 {
     char amzdate[32];
     char datestamp[32];
-    struct tm *local;
+    struct tm *gmt;
     flb_sds_t cr;
     flb_sds_t string_to_sign;
     flb_sds_t signature;
     flb_sds_t signed_headers;
     flb_sds_t auth_header;
 
-    local = flb_malloc(sizeof(struct tm));
-    if (!local) {
+    gmt = flb_malloc(sizeof(struct tm));
+    if (!gmt) {
         flb_errno();
         return NULL;
     }
 
-    localtime_r(&t_now, local);
-    strftime(amzdate, sizeof(amzdate) - 1, "%Y%m%dT%H%M%SZ", local);
-    strftime(datestamp, sizeof(datestamp) - 1, "%Y%m%d", local);
-    flb_free(local);
+    if (!gmtime_r(&t_now, gmt)) {
+        flb_error("[signv4] error converting given unix timestamp");
+        flb_free(gmt);
+        return NULL;
+    }
+
+    strftime(amzdate, sizeof(amzdate) - 1, "%Y%m%dT%H%M%SZ", gmt);
+    strftime(datestamp, sizeof(datestamp) - 1, "%Y%m%d", gmt);
+    flb_free(gmt);
 
     /* Task 1: canonical request */
     signed_headers = flb_sds_create_size(256);
@@ -978,6 +983,7 @@ flb_sds_t flb_signv4_do(struct flb_http_client *c, int normalize_uri,
         flb_sds_destroy(signed_headers);
         return NULL;
     }
+    printf("=> .creq (out)\n%s\n", cr);
 
     /* Task 2: string to sign */
     string_to_sign = flb_signv4_string_to_sign(c, cr, amzdate,
@@ -989,6 +995,7 @@ flb_sds_t flb_signv4_do(struct flb_http_client *c, int normalize_uri,
         return NULL;
     }
     flb_sds_destroy(cr);
+    printf("=> .sts (out)\n%s\n", string_to_sign);
 
     /* Task 3: calculate the signature */
     signature = flb_signv4_calculate_signature(string_to_sign, datestamp, service,
@@ -1000,7 +1007,6 @@ flb_sds_t flb_signv4_do(struct flb_http_client *c, int normalize_uri,
         return NULL;
     }
     flb_sds_destroy(string_to_sign);
-
     /* Task 4: add signature to HTTP request */
     auth_header = flb_signv4_add_authorization(c,
                                                access_key,

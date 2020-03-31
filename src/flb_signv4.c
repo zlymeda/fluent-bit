@@ -27,6 +27,7 @@
 
 #include <fluent-bit/flb_info.h>
 #include <fluent-bit/flb_kv.h>
+#include <fluent-bit/flb_uri.h>
 #include <fluent-bit/flb_sds.h>
 #include <fluent-bit/flb_utils.h>
 #include <fluent-bit/flb_http_client.h>
@@ -97,19 +98,6 @@ static int kv_key_cmp(const void *a_arg, const void *b_arg)
     return ret;
 }
 
-static inline int to_encode(char c)
-{
-    if ((c >= 48 && c <= 57)  ||  /* 0-9 */
-        (c >= 65 && c <= 90)  ||  /* A-Z */
-        (c >= 97 && c <= 122) ||  /* a-z */
-        (c == '-' || c == '_' || c == '.' || c == '~' || c == '/' ||
-         c == '=')) {
-        return FLB_FALSE;
-    }
-
-    return FLB_TRUE;
-}
-
 flb_sds_t flb_signv4_uri_normalize_path(char *uri, size_t len)
 {
     char *p;
@@ -178,43 +166,6 @@ flb_sds_t flb_signv4_uri_normalize_path(char *uri, size_t len)
     return out;
 }
 
-static flb_sds_t uri_encode(const char *uri, size_t len)
-{
-    int i;
-    flb_sds_t buf = NULL;
-    flb_sds_t tmp = NULL;
-
-    buf = flb_sds_create_size(len * 2);
-    if (!buf) {
-        flb_error("[signv4] cannot allocate buffer for URI encoding");
-        return NULL;
-    }
-
-    for (i = 0; i < len; i++) {
-        if (to_encode(uri[i]) == FLB_TRUE) {
-            tmp = flb_sds_printf(&buf, "%%%02X", (unsigned char) *(uri + i));
-            if (!tmp) {
-                flb_error("[signv4] error formatting special character");
-                flb_sds_destroy(buf);
-                return NULL;
-            }
-            buf = tmp;
-            continue;
-        }
-
-        /* Direct assignment, just copy the character */
-        if (buf) {
-            tmp = flb_sds_cat(buf, uri + i, 1);
-            if (!tmp) {
-                flb_error("[signv4] error composing outgoing buffer");
-                flb_sds_destroy(buf);
-                return NULL;
-            }
-        }
-    }
-
-    return buf;
-}
 
 /*
  * Encodes URI parameters, which can not have "/" characters in them
@@ -234,7 +185,7 @@ static flb_sds_t uri_encode_params(const char *uri, size_t len)
     }
 
     for (i = 0; i < len; i++) {
-        if (to_encode(uri[i]) == FLB_TRUE || uri[i] == '/') {
+        if (flb_uri_to_encode(uri[i]) == FLB_TRUE || uri[i] == '/') {
             tmp = flb_sds_printf(&buf, "%%%02X", (unsigned char) *(uri + i));
             if (!tmp) {
                 flb_error("[signv4] error formatting special character");
@@ -578,7 +529,7 @@ static flb_sds_t flb_signv4_canonical_request(struct flb_http_client *c,
     }
 
     /* Do URI encoding (rfc3986) */
-    uri = uri_encode(tmp, len);
+    uri = flb_uri_encode(tmp, len);
     if (tmp != c->uri) {
         flb_sds_destroy(tmp);
     }

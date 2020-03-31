@@ -526,6 +526,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
                                         const char *host, int port,
                                         const char *proxy, int flags)
 {
+    int len;
     int ret;
     char *p;
     char *buf = NULL;
@@ -535,7 +536,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
     char *fmt_proxy =                           \
         "%s http://%s:%i%s HTTP/1.%i\r\n"
         "Proxy-Connection: KeepAlive\r\n";
-
+    flb_sds_t uri_encoded;
     struct flb_http_client *c;
 
     switch (method) {
@@ -559,12 +560,19 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
         return NULL;
     }
 
+    len = strlen(uri);
+    uri_encoded = flb_uri_encode(uri, len);
+    if (!uri_encoded) {
+        flb_free(buf);
+        return NULL;
+    }
+
     /* FIXME: handler for HTTPS proxy */
     if (!proxy) {
         ret = snprintf(buf, FLB_HTTP_BUF_SIZE,
                        fmt_plain,
                        str_method,
-                       uri,
+                       uri_encoded,
                        flags & FLB_HTTP_10 ? 0 : 1,
                        body_len);
     }
@@ -574,25 +582,29 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
                        str_method,
                        host,
                        port,
-                       uri,
+                       uri_encoded,
                        flags & FLB_HTTP_10 ? 0 : 1);
     }
 
     if (ret == -1) {
         flb_errno();
+        flb_sds_destroy(uri_encoded);
         flb_free(buf);
         return NULL;
     }
 
     c = flb_calloc(1, sizeof(struct flb_http_client));
     if (!c) {
+        flb_errno();
+        flb_sds_destroy(uri_encoded);
         flb_free(buf);
         return NULL;
     }
 
+    c->uri         = uri;
     c->u_conn      = u_conn;
     c->method      = method;
-    c->uri         = uri;
+    c->uri_encoded = uri_encoded;
     c->host        = host;
     c->port        = port;
     c->header_buf  = buf;
@@ -632,6 +644,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
         ret = proxy_parse(proxy, c);
         if (ret != 0) {
             flb_free(buf);
+            flb_sds_destroy(uri_encoded);
             flb_free(c);
             return NULL;
         }
@@ -642,6 +655,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
     if (!c->resp.data) {
         flb_errno();
         flb_free(buf);
+        flb_sds_destroy(uri_encoded);
         flb_free(c);
         return NULL;
     }
@@ -1063,6 +1077,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
 void flb_http_client_destroy(struct flb_http_client *c)
 {
     http_headers_destroy(c);
+    flb_sds_destroy(c->uri_encoded);
     flb_free(c->resp.data);
     flb_free(c->header_buf);
     flb_free((void *)c->proxy.host);

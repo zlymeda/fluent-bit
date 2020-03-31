@@ -103,6 +103,9 @@ struct flb_http_client {
     const char *host;
     int port;
 
+    /* Encoded URI */
+    flb_sds_t uri_encoded;
+
     /* payload */
     int body_len;
     const char *body_buf;
